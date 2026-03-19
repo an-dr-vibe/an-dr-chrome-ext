@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>an-dr: Jira</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      color: #172b4d;
+      background: #fff;
+      width: 300px;
+      padding: 0 0 14px;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #0052cc;
+      color: #fff;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-left { display: flex; align-items: center; gap: 8px; }
+    header h1 { font-size: 14px; font-weight: 700; }
+    header p  { font-size: 11px; opacity: 0.75; }
+
+    /* ── Toggle switch ── */
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.85);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle {
+      position: relative;
+      width: 34px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.3);
+      border-radius: 18px;
+      transition: background 0.2s;
+      cursor: pointer;
+    }
+
+    .toggle input:checked + .toggle-track { background: #57d9a3; }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: #fff;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.2s;
+    }
+
+    .toggle input:checked + .toggle-track::after { transform: translateX(16px); }
+
+    /* ── Section ── */
+    section { padding: 12px 14px 0; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #6b778c;
+    }
+
+    /* ── Color controls ── */
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .color-row label {
+      font-size: 11px;
+      color: #6b778c;
+    }
+
+    input[type="color"] {
+      width: 28px;
+      height: 22px;
+      border: 2px solid #dfe1e6;
+      border-radius: 4px;
+      padding: 1px;
+      cursor: pointer;
+      background: none;
+    }
+
+    .reset-color {
+      font-size: 11px;
+      color: #0052cc;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      text-decoration: underline;
+    }
+
+    .reset-color:hover { color: #0065ff; }
+
+    /* ── Field list ── */
+    .field-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+
+    .field-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f4f5f7;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+
+    .field-item .name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .field-item button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #97a0af;
+      font-size: 15px;
+      line-height: 1;
+      padding: 0 0 0 8px;
+      transition: color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .field-item button:hover { color: #ff5630; }
+
+    .empty-state {
+      text-align: center;
+      color: #97a0af;
+      font-size: 12px;
+      padding: 10px 0;
+    }
+
+    /* ── Add row ── */
+    .add-row { display: flex; gap: 6px; }
+
+    .add-row input {
+      flex: 1;
+      border: 2px solid #dfe1e6;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 13px;
+      color: #172b4d;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .add-row input:focus { border-color: #0052cc; }
+    .add-row input::placeholder { color: #b3bac5; }
+
+    .add-row button {
+      background: #0052cc;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .add-row button:hover { background: #0065ff; }
+
+    .status {
+      font-size: 11px;
+      color: #00875a;
+      margin-top: 6px;
+      min-height: 14px;
+      text-align: right;
+    }
+
+    /* ── Mode selector ── */
+    .mode-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .mode-btn {
+      flex: 1;
+      background: #f4f5f7;
+      border: 2px solid #dfe1e6;
+      border-radius: 4px;
+      padding: 5px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #6b778c;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+
+    .mode-btn:hover { border-color: #0052cc; color: #0052cc; }
+    .mode-btn.active { background: #0052cc; border-color: #0052cc; color: #fff; }
+
+    body.disabled .field-list,
+    body.disabled .add-row,
+    body.disabled .color-row,
+    body.disabled .mode-row {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <div>
+        <h1>an-dr: Jira</h1>
+        <p>Field highlighter</p>
+      </div>
+    </div>
+    <label class="toggle-wrap">
+      <span id="toggle-label">On</span>
+      <span class="toggle">
+        <input type="checkbox" id="enabled-toggle" checked />
+        <span class="toggle-track"></span>
+      </span>
+    </label>
+  </header>
+
+  <section>
+    <div class="section-header">
+      <span class="section-label">Watched Fields</span>
+      <div class="color-row">
+        <label for="color-pick">Color</label>
+        <input type="color" id="color-pick" value="#ff991f" />
+        <button class="reset-color" id="reset-color">reset</button>
+      </div>
+    </div>
+
+    <div class="mode-row">
+      <button class="mode-btn active" data-mode="always">Always</button>
+      <button class="mode-btn" data-mode="empty">Empty / None only</button>
+    </div>
+
+    <ul class="field-list" id="field-list"></ul>
+
+    <div class="add-row">
+      <input type="text" id="new-field" placeholder="e.g. Story Points" maxlength="80" />
+      <button id="add-btn">Add</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>
