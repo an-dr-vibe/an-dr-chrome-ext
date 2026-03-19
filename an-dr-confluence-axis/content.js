@@ -91,7 +91,6 @@ function getOverlayContainer() {
     s.textContent = `
       .andr-confluence-label {
         position: fixed;
-        background: #0052cc;
         color: #fff;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 11px;
@@ -215,9 +214,16 @@ function updateCursorHiding() {
   overlayContainer.querySelectorAll(`[${LABEL_ATTR}]`).forEach(badge => {
     if (!hideOnCursor || cursorTop === null) { badge.style.display = ''; return; }
     const macroId = badge.getAttribute('data-andr-macro-id');
-    const img = macroId ? ed.querySelector(`img[data-macro-id="${macroId}"]`) : null;
-    if (!img) { badge.style.display = ''; return; }
-    const ir = img.getBoundingClientRect(); // iframe-relative coords
+    let el;
+    if (macroId != null) {
+      el = ed.querySelector(`img[data-macro-id="${macroId}"]`);
+    } else {
+      const href = badge.getAttribute('data-andr-link-href');
+      const idx  = parseInt(badge.getAttribute('data-andr-link-idx') || '0', 10);
+      el = getLinkBadgeAnchor(ed, href, idx);
+    }
+    if (!el) { badge.style.display = ''; return; }
+    const ir = el.getBoundingClientRect();
     badge.style.display = (cursorTop < ir.bottom && cursorBottom > ir.top) ? 'none' : '';
   });
 }
@@ -298,6 +304,7 @@ async function scan() {
       badge.setAttribute(LABEL_ATTR, key);
       badge.setAttribute('data-andr-macro-id', macroId);
       badge.textContent = `${statusPrefix}${key}: ${entry.title}`;
+      badge.style.background = entry.status ? statusColor(entry.status) : '#0052cc';
       applyPos(badge, pos);
       container.appendChild(badge);
       n++;
