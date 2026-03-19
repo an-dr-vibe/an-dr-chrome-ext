@@ -6,7 +6,9 @@ const KEY_JIRA_URL    = 'andr_confluence_jira_url';
 const KEY_ENABLED     = 'andr_confluence_enabled';
 const KEY_SHOW_STATUS = 'andr_confluence_show_status';
 const KEY_BADGE_POS      = 'andr_confluence_badge_pos';
-const KEY_HIDE_ON_CURSOR = 'andr_confluence_hide_on_cursor';
+const KEY_HIDE_ON_CURSOR  = 'andr_confluence_hide_on_cursor';
+const KEY_SHOW_LINK_STATUS = 'andr_confluence_show_link_status';
+const BROWSE_RE = /\/browse\/([A-Z][A-Z0-9]+-\d+)/i;
 const DEFAULT_URL     = 'https://jira.se.axis.com';
 const ISSUE_KEY_RE    = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
 const LABEL_ATTR      = 'data-andr-title';
@@ -15,8 +17,9 @@ let jiraBaseUrl  = DEFAULT_URL;
 let enabled      = true;
 let showStatus   = false;
 let badgePos      = 'right'; // 'right' | 'left' | 'above' | 'below'
-let hideOnCursor  = false;
-let scanning      = false;
+let hideOnCursor   = false;
+let showLinkStatus = false;
+let scanning       = false;
 let scanQueued   = false;
 
 const cache = new Map(); // `${baseUrl}/${key}` → { title, status } | null
@@ -24,22 +27,24 @@ const cache = new Map(); // `${baseUrl}/${key}` → { title, status } | null
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 function loadConfig(cb) {
-  chrome.storage.sync.get([KEY_JIRA_URL, KEY_ENABLED, KEY_SHOW_STATUS, KEY_BADGE_POS, KEY_HIDE_ON_CURSOR], (r) => {
-    jiraBaseUrl   = (r[KEY_JIRA_URL] || DEFAULT_URL).replace(/\/$/, '');
-    enabled       = r[KEY_ENABLED] !== false;
-    showStatus    = r[KEY_SHOW_STATUS] === true;
-    badgePos      = r[KEY_BADGE_POS] || 'right';
-    hideOnCursor  = r[KEY_HIDE_ON_CURSOR] === true;
+  chrome.storage.sync.get([KEY_JIRA_URL, KEY_ENABLED, KEY_SHOW_STATUS, KEY_BADGE_POS, KEY_HIDE_ON_CURSOR, KEY_SHOW_LINK_STATUS], (r) => {
+    jiraBaseUrl    = (r[KEY_JIRA_URL] || DEFAULT_URL).replace(/\/$/, '');
+    enabled        = r[KEY_ENABLED] !== false;
+    showStatus     = r[KEY_SHOW_STATUS] === true;
+    badgePos       = r[KEY_BADGE_POS] || 'right';
+    hideOnCursor   = r[KEY_HIDE_ON_CURSOR] === true;
+    showLinkStatus = r[KEY_SHOW_LINK_STATUS] === true;
     cb();
   });
 }
 
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes[KEY_JIRA_URL])       { jiraBaseUrl  = (changes[KEY_JIRA_URL].newValue || DEFAULT_URL).replace(/\/$/, ''); cache.clear(); }
-  if (changes[KEY_ENABLED])        { enabled      = changes[KEY_ENABLED].newValue !== false; }
-  if (changes[KEY_SHOW_STATUS])    { showStatus   = changes[KEY_SHOW_STATUS].newValue === true; }
-  if (changes[KEY_BADGE_POS])      { badgePos     = changes[KEY_BADGE_POS].newValue || 'right'; }
-  if (changes[KEY_HIDE_ON_CURSOR]) { hideOnCursor = changes[KEY_HIDE_ON_CURSOR].newValue === true; updateCursorHiding(); return; }
+  if (changes[KEY_JIRA_URL])        { jiraBaseUrl    = (changes[KEY_JIRA_URL].newValue || DEFAULT_URL).replace(/\/$/, ''); cache.clear(); }
+  if (changes[KEY_ENABLED])         { enabled        = changes[KEY_ENABLED].newValue !== false; }
+  if (changes[KEY_SHOW_STATUS])     { showStatus     = changes[KEY_SHOW_STATUS].newValue === true; }
+  if (changes[KEY_BADGE_POS])       { badgePos       = changes[KEY_BADGE_POS].newValue || 'right'; }
+  if (changes[KEY_SHOW_LINK_STATUS]){ showLinkStatus = changes[KEY_SHOW_LINK_STATUS].newValue === true; }
+  if (changes[KEY_HIDE_ON_CURSOR])  { hideOnCursor   = changes[KEY_HIDE_ON_CURSOR].newValue === true; updateCursorHiding(); return; }
   requestScan();
 });
 
@@ -102,6 +107,22 @@ function getOverlayContainer() {
         text-overflow: ellipsis;
         box-shadow: 0 1px 4px rgba(0,0,0,0.2);
       }
+      .andr-link-status {
+        position: fixed;
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1;
+        padding: 2px 5px;
+        border-radius: 3px;
+        pointer-events: none;
+        user-select: none;
+        white-space: nowrap;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      }
     `;
     document.head.appendChild(s);
   }
@@ -135,15 +156,35 @@ function applyPos(badge, pos) {
   badge.style.right = pos.right != null ? pos.right + 'px' : '';
 }
 
+function getLinkBadgeAnchor(ed, href, idx) {
+  return [...ed.querySelectorAll('a[href]')]
+    .filter(a => a.getAttribute('href') === href)[idx] ?? null;
+}
+
 function repositionAll() {
   const ed = getEditorDoc();
-  if (!ed) return;
+  const iframe = getIframe();
+  if (!ed || !iframe) return;
+  const fr = iframe.getBoundingClientRect();
+
   overlayContainer?.querySelectorAll(`[${LABEL_ATTR}]`).forEach(badge => {
     const macroId = badge.getAttribute('data-andr-macro-id');
-    const img = macroId ? ed.querySelector(`img[data-macro-id="${macroId}"]`) : null;
-    if (!img) return;
-    const pos = getBadgePos(img);
-    if (pos) applyPos(badge, pos);
+    if (macroId != null) {
+      // widget badge
+      const img = ed.querySelector(`img[data-macro-id="${macroId}"]`);
+      if (!img) return;
+      const pos = getBadgePos(img);
+      if (pos) applyPos(badge, pos);
+    } else {
+      // link status badge
+      const href = badge.getAttribute('data-andr-link-href');
+      const idx  = parseInt(badge.getAttribute('data-andr-link-idx') || '0', 10);
+      const a = getLinkBadgeAnchor(ed, href, idx);
+      if (!a) return;
+      const ar = a.getBoundingClientRect();
+      badge.style.top  = (fr.top  + ar.top  + (ar.height - 16) / 2) + 'px';
+      badge.style.left = (fr.left + ar.right + 4) + 'px';
+    }
   });
 }
 
@@ -181,10 +222,14 @@ function updateCursorHiding() {
   });
 }
 
-// ── Widget discovery ──────────────────────────────────────────────────────────
+// ── Widget discovery & link discovery ─────────────────────────────────────────
 
-function extractKeys(str) {
-  return [...new Set([...str.matchAll(ISSUE_KEY_RE)].map(m => m[1]))];
+function statusColor(status) {
+  const s = (status || '').toLowerCase();
+  if (/done|closed|resolved|fixed|complete/.test(s)) return '#00875a';
+  if (/progress|development|review|testing/.test(s)) return '#0052cc';
+  if (/blocked|impediment/.test(s))                  return '#de350b';
+  return '#6b778c'; // To Do / Open / default
 }
 
 function findWidgets(ed) {
@@ -195,6 +240,21 @@ function findWidgets(ed) {
       if (m) widgets.push({ el: img, key: m[1], macroId: img.getAttribute('data-macro-id') || '' });
     });
   return widgets;
+}
+
+function findLinks(ed) {
+  const links = [];
+  const hrefCount = {};
+  ed.querySelectorAll('a[href]').forEach(a => {
+    const m = (a.getAttribute('href') || '').match(BROWSE_RE);
+    if (!m) return;
+    const key  = m[1].toUpperCase();
+    const href = a.getAttribute('href');
+    const idx  = hrefCount[href] ?? 0;
+    hrefCount[href] = idx + 1;
+    links.push({ el: a, key, href, idx });
+  });
+  return links;
 }
 
 // ── Scan ──────────────────────────────────────────────────────────────────────
@@ -242,7 +302,35 @@ async function scan() {
       container.appendChild(badge);
       n++;
     });
-    console.log(`[an-dr: Confluence] showed ${n} badge(s)`);
+    console.log(`[an-dr: Confluence] showed ${n} widget badge(s)`);
+
+    // ── Link status badges ───────────────────────────────────────────────────
+    if (showLinkStatus) {
+      const iframe = getIframe();
+      const links  = findLinks(ed);
+      const linkKeys = [...new Set(links.map(l => l.key))];
+      await Promise.all(linkKeys.map(k => fetchIssue(k, baseUrl)));
+      const fr = iframe.getBoundingClientRect();
+      let m = 0;
+      links.forEach(({ el, key, href, idx }) => {
+        const entry = cache.get(`${baseUrl}/${key}`);
+        if (!entry?.status) return;
+        const ar = el.getBoundingClientRect();
+        const chip = document.createElement('span');
+        chip.className = 'andr-link-status';
+        chip.setAttribute(LABEL_ATTR, `link-${key}-${idx}`);
+        chip.setAttribute('data-andr-link-href', href);
+        chip.setAttribute('data-andr-link-idx', idx);
+        chip.textContent = entry.status;
+        chip.style.background = statusColor(entry.status);
+        chip.style.top  = (fr.top  + ar.top  + (ar.height - 16) / 2) + 'px';
+        chip.style.left = (fr.left + ar.right + 4) + 'px';
+        container.appendChild(chip);
+        m++;
+      });
+      console.log(`[an-dr: Confluence] showed ${m} link status badge(s)`);
+    }
+
     updateCursorHiding();
 
   } finally {
