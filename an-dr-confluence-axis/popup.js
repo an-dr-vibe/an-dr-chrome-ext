@@ -1,11 +1,12 @@
 // an-dr: Confluence Axis - Popup Script
 
-const KEY_JIRA_URL       = 'andr_confluence_jira_url';
-const KEY_ENABLED        = 'andr_confluence_enabled';
-const KEY_SHOW_STATUS    = 'andr_confluence_show_status';
-const KEY_BADGE_POS      = 'andr_confluence_badge_pos';
-const KEY_HIDE_ON_CURSOR   = 'andr_confluence_hide_on_cursor';
+const KEY_JIRA_URL        = 'andr_confluence_jira_url';
+const KEY_ENABLED         = 'andr_confluence_enabled';
+const KEY_SHOW_STATUS     = 'andr_confluence_show_status';
+const KEY_BADGE_POS       = 'andr_confluence_badge_pos';
+const KEY_HIDE_ON_CURSOR  = 'andr_confluence_hide_on_cursor';
 const KEY_SHOW_LINK_STATUS = 'andr_confluence_show_link_status';
+const KEY_ALL_LINK_STATUS  = 'andr_all_link_status';
 const DEFAULT_URL     = 'https://jira.se.axis.com';
 
 const jiraUrlInput     = document.getElementById('jira-url');
@@ -17,12 +18,14 @@ const showStatusToggle   = document.getElementById('show-status-toggle');
 const badgePosSelect     = document.getElementById('badge-pos-select');
 const hideOnCursorToggle   = document.getElementById('hide-on-cursor-toggle');
 const showLinkStatusToggle = document.getElementById('show-link-status-toggle');
+const allLinkStatusToggle  = document.getElementById('all-link-status-toggle');
 
 let enabled        = true;
 let showStatus     = false;
 let badgePos       = 'right';
 let hideOnCursor   = false;
 let showLinkStatus = false;
+let showAllLinks   = false;
 
 function render() {
   toggle.checked               = enabled;
@@ -31,6 +34,7 @@ function render() {
   badgePosSelect.value         = badgePos;
   hideOnCursorToggle.checked   = hideOnCursor;
   showLinkStatusToggle.checked = showLinkStatus;
+  allLinkStatusToggle.checked  = showAllLinks;
   document.body.classList.toggle('disabled', !enabled);
 }
 
@@ -65,6 +69,11 @@ showLinkStatusToggle.addEventListener('change', () => {
   chrome.storage.sync.set({ [KEY_SHOW_LINK_STATUS]: showLinkStatus }, () => flash('Saved'));
 });
 
+allLinkStatusToggle.addEventListener('change', () => {
+  showAllLinks = allLinkStatusToggle.checked;
+  chrome.storage.sync.set({ [KEY_ALL_LINK_STATUS]: showAllLinks }, () => flash('Saved'));
+});
+
 saveBtn.addEventListener('click', () => {
   const value = jiraUrlInput.value.trim().replace(/\/$/, '') || DEFAULT_URL;
   chrome.storage.sync.set({ [KEY_JIRA_URL]: value }, () => flash('Saved'));
@@ -72,13 +81,14 @@ saveBtn.addEventListener('click', () => {
 
 jiraUrlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveBtn.click(); });
 
-chrome.storage.sync.get([KEY_JIRA_URL, KEY_ENABLED, KEY_SHOW_STATUS, KEY_BADGE_POS, KEY_HIDE_ON_CURSOR, KEY_SHOW_LINK_STATUS], (r) => {
+chrome.storage.sync.get([KEY_JIRA_URL, KEY_ENABLED, KEY_SHOW_STATUS, KEY_BADGE_POS, KEY_HIDE_ON_CURSOR, KEY_SHOW_LINK_STATUS, KEY_ALL_LINK_STATUS], (r) => {
   jiraUrlInput.value = r[KEY_JIRA_URL] || DEFAULT_URL;
   enabled        = r[KEY_ENABLED] !== false;
   showStatus     = r[KEY_SHOW_STATUS] === true;
   badgePos       = r[KEY_BADGE_POS] || 'right';
   hideOnCursor   = r[KEY_HIDE_ON_CURSOR] === true;
   showLinkStatus = r[KEY_SHOW_LINK_STATUS] === true;
+  showAllLinks   = r[KEY_ALL_LINK_STATUS] === true;
   render();
   jiraUrlInput.focus();
 });
